@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.aether</groupId>
+    <artifactId>aether-packet-engine</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>aether-packet-engine</name>
+    <description>Production-grade high-performance packet processing engine with JNI/Native integration</description>
+
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        
+        <junit.version>5.10.1</junit.version>
+        <jmh.version>1.37</jmh.version>
+        
+        <!-- Native compilation flags as properties -->
+        <native.compiler.optimization>-O3</native.compiler.optimization>
+        <native.compiler.warnings.all>-Wall</native.compiler.warnings.all>
+        <native.compiler.warnings.extra>-Wextra</native.compiler.warnings.extra>
+    </properties>
+
+    <dependencies>
+        <!-- JUnit 5 for testing -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- JMH for benchmarking -->
+        <dependency>
+            <groupId>org.openjdk.jmh</groupId>
+            <artifactId>jmh-core</artifactId>
+            <version>${jmh.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.openjdk.jmh</groupId>
+            <artifactId>jmh-generator-annprocess</artifactId>
+            <version>${jmh.version}</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Compiler Plugin -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.12.1</version>
+                <configuration>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
+                    <compilerArgs>
+                        <arg>-parameters</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+
+            <!-- Surefire Plugin for Unit Tests -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+            </plugin>
+
+            <!-- AntRun Plugin to safely handle native builds, optional directories, and lifecycle targets -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <!-- Target: clean -->
+                    <execution>
+                        <id>custom-clean</id>
+                        <phase>clean</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <exportAntProperties>true</exportAntProperties>
+                            <target>
+                                <echo message="Cleaning native build artifacts and benchmark outputs..." />
+                                <delete dir="${basedir}/native/build" quiet="true" />
+                                <delete dir="${basedir}/target" quiet="true" />
+                            </target>
+                        </configuration>
+                    </execution>
+
+                    <!-- Target: build (Compiles Java + Optional Native C/C++ with flags -O3, -Wall, -Wextra) -->
+                    <execution>
+                        <id>native-build</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <echo message="Checking for native source directory..." />
+                                <available file="${basedir}/native" type="dir" property="native.dir.exists" />
+                                
+                                <antcall target="compile-native-code" />
+                            </target>
+                        </configuration>
+                    </execution>
+
+                    <!-- Target: benchmark (Executes JMH benchmarks if benchmark classes exist) -->
+                    <execution>
+                        <id>run-benchmark</id>
+                        <phase>integration-test</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <echo message="Checking for benchmark source directory..." />
+                                <available file="${basedir}/src/main/java/com/aether/benchmark" type="dir" property="benchmark.dir.exists" />
+                                
+                                <antcall target="execute-benchmarks" />
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+
+        <pluginManagement>
+            <plugins>
+                <!-- AntRun internal macro targets for safe conditional execution -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-antrun-plugin</artifactId>
+                    <version>3.1.0</version>
+                    <dependencies>
+                        <dependency>
+                            <groupId>org.apache.ant</groupId>
+                            <artifactId>ant</artifactId>
+                            <version>1.10.14</version>
+                        </dependency>
+                    </dependencies>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
+    <profiles>
+        <!-- Profile to encapsulate native compilation and custom targets cleanly -->
+        <profile>
+            <id>native-engine</id>
+            <activation>
+                <file>
+                    <exists>native</exists>
+                </file>
+            </activation>
